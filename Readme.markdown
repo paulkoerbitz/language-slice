@@ -2,7 +2,7 @@
 
 This module contains an AST and a parser for parsing slice files,
 which is the interface definition language used by the RPC library
-(ZeroC Ice)[http://www.zeroc.com/ice.html].
+[ZeroC Ice](http://www.zeroc.com/ice.html).
 
 ## Todo
 
