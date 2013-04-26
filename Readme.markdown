@@ -6,6 +6,6 @@ which is the interface definition language used by the RPC library
 
 ## Todo
 
-- Method declarations need to accept an optional 'throws' statement
 - Comprehensive test suite
 - Better error messages
+- Make keywords illegal as identifiers

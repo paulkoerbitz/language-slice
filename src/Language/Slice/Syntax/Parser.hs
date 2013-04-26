@@ -67,10 +67,18 @@ parseType = (string "void" >> return STVoid)
 parseSepList :: Parser a -> Parser b -> Parser [b]
 parseSepList sep parser = go []
   where
-    go lst = (parseItem >>= \i -> (sep >> go (i:lst)) <|> return (Prelude.reverse $ i:lst)) 
+    go lst = (parseItem >>= \i -> ((sep >> go (i:lst)) <|> return (Prelude.reverse $ i:lst))) 
              <|> if Prelude.null lst then return [] else fail " parseSepList: extra seperator"
     parseItem = skipWS >> parser >>= \i -> skipWS >> return i
-
+    
+parseList :: Parser b -> Parser [b]
+parseList parser = go []
+  where
+    go lst = do i <- parseItem
+                go (i:lst)
+             <|>
+             (return $ Prelude.reverse lst)
+    parseItem = skipWS >> parser >>= \i -> skipWS >> return i
                    
 parseBlock :: ByteString -> Parser a -> Parser (String, a)
 parseBlock kw parser = do
@@ -121,12 +129,12 @@ parseEnum = do
 
 parseStruct :: Parser SliceDecl
 parseStruct = do
-  (name,decls) <- parseBlock "struct" (parseSepList (char ';') parseField)
+  (name,decls) <- parseBlock "struct" (parseList parseSemTermField)
   return (StructDecl name decls)
 
 parseClass :: Parser SliceDecl
 parseClass = do
-  (name,exts,decls) <- parseExtBlock "class" (parseSepList (char ';') parseMethodOrField)
+  (name,exts,decls) <- parseExtBlock "class" (parseList parseMethodOrField)
   return $ ClassDecl name (safeHead exts) decls
   where
     safeHead []     = Nothing
@@ -134,12 +142,12 @@ parseClass = do
 
 parseInterface :: Parser SliceDecl
 parseInterface = do
-  (name,exts,decls) <- parseExtBlock "interface" (parseSepList (char ';') parseMethod)
+  (name,exts,decls) <- parseExtBlock "interface" (parseList parseMethod)
   return $ InterfaceDecl name exts decls
 
 parseException :: Parser SliceDecl
 parseException =  do
-  (name,exts,decls) <- parseExtBlock "exception" (parseSepList (char ';') parseField)
+  (name,exts,decls) <- parseExtBlock "exception" (parseList parseSemTermField)
   return $ ExceptionDecl name exts decls
 
 parseSequence :: Parser SliceDecl
@@ -167,8 +175,15 @@ parseField = do
   type' <- parseType
   skipWS
   name <- identifier
-  skipWS >> char ';'
+  skipWS
+  -- skipWS >> char ';'
   return $ FieldDecl type' name
+  
+parseSemTermField :: Parser FieldDecl
+parseSemTermField = do
+  field <- parseField
+  skipWS >> char ';' >> skipWS
+  return field
   
 parseMethod :: Parser MethodDecl
 parseMethod = do
@@ -177,9 +192,11 @@ parseMethod = do
   name <- identifier
   skipWS >> char '('
   fields <- parseSepList (char ',') parseField
-  skipWS >> char ')' >> skipWS >> char ';'
-  return $ MethodDecl rType name fields
+  skipWS >> char ')' >> skipWS 
+  excepts <- (string "throws" >> skipWS >> parseSepList (char ',') identifier) <|> return []
+  skipWS >> char ';' >> skipWS
+  return $ MethodDecl rType name fields excepts
   
 parseMethodOrField :: Parser MethodOrFieldDecl
-parseMethodOrField = (parseMethod >>= return . MDecl) <|> (parseField >>= return . FDecl)
+parseMethodOrField = (parseMethod >>= return . MDecl) <|> (parseSemTermField >>= return . FDecl)
   

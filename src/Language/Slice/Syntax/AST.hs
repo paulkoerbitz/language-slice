@@ -36,6 +36,6 @@ data SliceDecl = ModuleDecl String [SliceDecl]
 
 data FieldDecl = FieldDecl SliceType String deriving (Show, Eq)
 
-data MethodDecl = MethodDecl SliceType String [FieldDecl] deriving (Show, Eq)
+data MethodDecl = MethodDecl SliceType String [FieldDecl] [String] deriving (Show, Eq)
 
 data MethodOrFieldDecl = MDecl MethodDecl | FDecl FieldDecl deriving (Show, Eq)
