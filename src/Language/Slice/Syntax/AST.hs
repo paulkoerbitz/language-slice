@@ -9,7 +9,8 @@ module Language.Slice.Syntax.AST
 
 data IncludeDelimiters = AngleBrackets | Quotes deriving (Show, Eq)
 
-data SliceType = STBool | STByte | STShort | STInt | STLong 
+data SliceType = STVoid 
+               | STBool | STByte | STShort | STInt | STLong 
                | STFloat | STDouble 
                | STString 
                | STUserDefined String

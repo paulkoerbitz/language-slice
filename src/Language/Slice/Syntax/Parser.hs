@@ -53,7 +53,8 @@ identifier :: Parser String
 identifier = AT.takeWhile1 (inClass "a-zA-Z0-9_") >>= return . unpack
 
 parseType :: Parser SliceType
-parseType = (string "bool" >> return STBool)
+parseType = (string "void" >> return STVoid)
+            <|> (string "bool" >> return STBool)
             <|> (string "byte" >> return STByte)
             <|> (string "int" >> return STInt)
             <|> (string "long" >> return STLong)
