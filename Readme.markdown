@@ -9,3 +9,7 @@ which is the interface definition language used by the RPC library
 - Comprehensive test suite
 - Better error messages
 - Make keywords illegal as identifiers
+- Handle extra semicolons
+- Fail if a class extends various interfaces
+- Skip comments
+
