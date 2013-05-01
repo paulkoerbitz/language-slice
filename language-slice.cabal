@@ -1,7 +1,7 @@
 name:                language-slice
 version:             0.1.0.0
 synopsis:            AST and parser for the ZeroC Slice language (Specification language for ICE)
--- description:         
+description:         AST and parser for the ZeroC Slice language (Specification language for ICE)
 homepage:            https://github.com/paulkoerbitz/language-slice
 license:             BSD3
 license-file:        LICENSE
