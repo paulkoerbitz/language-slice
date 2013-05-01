@@ -27,6 +27,7 @@ Test-Suite test-parser
                      test-framework >= 0.4.1,
                      test-framework-quickcheck2,
                      test-framework-hunit,
+                     bytestring,
                      language-slice
   x-uses-tf:         true
   ghc-options:       -Wall

@@ -7,7 +7,7 @@ module Language.Slice.Syntax.AST
        , MethodOrFieldDecl(..)
        ) where
 
-data IncludeDelimiters = AngleBrackets | Quotes deriving (Show, Eq)
+data IncludeDelimiters = AngleBrackets | Quotes deriving (Show, Read, Eq)
 
 data SliceType = STVoid 
                | STBool | STByte | STShort | STInt | STLong 
@@ -15,12 +15,12 @@ data SliceType = STVoid
                | STString 
                | STUserDefined String
                | STUserDefinedPrx String
-               deriving (Show, Eq)
+               deriving (Show, Read, Eq)
                  
 data SliceExpr = SliceStr String
                | SliceInt Int
                | SliceDouble Double
-               deriving (Show, Eq)
+               deriving (Show, Read, Eq)
 
 data SliceDecl = ModuleDecl String [SliceDecl]
                | IncludeDecl IncludeDelimiters String
@@ -32,10 +32,10 @@ data SliceDecl = ModuleDecl String [SliceDecl]
                | DictionaryDecl SliceType SliceType String
                | ExceptionDecl String [String] [FieldDecl]
                | ConstDecl SliceType String SliceExpr
-               deriving (Show, Eq)
+               deriving (Show, Read, Eq)
 
-data FieldDecl = FieldDecl SliceType String deriving (Show, Eq)
+data FieldDecl = FieldDecl SliceType String deriving (Show, Read, Eq)
 
-data MethodDecl = MethodDecl SliceType String [FieldDecl] [String] deriving (Show, Eq)
+data MethodDecl = MethodDecl SliceType String [FieldDecl] [String] deriving (Show, Read, Eq)
 
-data MethodOrFieldDecl = MDecl MethodDecl | FDecl FieldDecl deriving (Show, Eq)
+data MethodOrFieldDecl = MDecl MethodDecl | FDecl FieldDecl deriving (Show, Read, Eq)
