@@ -5,6 +5,8 @@ module Language.Slice.Syntax.Parser
          parseField,
          parseList,
          parseOnly,
+         parseType,
+         parseSemTermField
 --          module Language.Slice.Syntax.AST
        ) where
 
@@ -12,7 +14,7 @@ import           Control.Applicative ((<|>),(<$>),(<*>),(<*),(*>))
 import           Control.Monad (liftM)
 import           Language.Slice.Syntax.AST
 import           Data.Attoparsec as AT
-import           Data.Attoparsec.Char8 as ATC8 ((<*.),(.*>))
+import           Data.Attoparsec.Char8 as ATC8 ((<*.),(.*>), Number(..), number)
 import           Data.ByteString.Char8
 import qualified Data.ByteString as BS
 import           Data.Char (ord, chr)
@@ -105,6 +107,7 @@ parseType = ((string "void" >> return STVoid)
              <|> (string "double" >> return STDouble)
              <|> (string "string" >> return STString)
              <|> do tn <- identifier
+                    skipWsOrComment
                     (char '*' >> return (STUserDefinedPrx tn)) <|> return (STUserDefined tn))
             <?> "type"
             
@@ -233,16 +236,35 @@ parseField = do
   skipWsOrComment
   name <- identifier
   skipWsOrComment
-  return $ FieldDecl type' name
+  return $ FieldDecl type' name Nothing
+  
+parseDefValue :: Parser (Maybe DefaultValue)
+parseDefValue = do
+  (string "=" >> skipWsOrComment *>
+   ((Just . DefaultBool <$> parseBool)
+    <|> do num <- number
+           case num of
+             (D dbl) -> return . Just . DefaultDouble $ dbl
+             (I int) -> return . Just . DefaultInteger $ int
+    <|> (Just . DefaultString . unpack . BS.pack <$> parseString)
+    <|> (Just . DefaultIdentifier <$> identifier))
+   <* skipWsOrComment)
+  <|> return Nothing
+  where
+    parseBool   = (string "true" >> return True) <|> (string "false" >> return False)
+    parseString = "\"" .*> manyTill anyWord8 (string "\"")
 
 parseSemTermField :: Parser FieldDecl
 parseSemTermField = do
-  field <- parseField
+  (FieldDecl type' name _) <- parseField
+  skipWsOrComment
+  mDefVal <- parseDefValue
   skipWsOrComment >> char ';' >> skipWsOrCommentOrSem
-  return field
+  return (FieldDecl type' name mDefVal)
 
 parseMethod :: Parser MethodDecl
 parseMethod = do
+  annot <- (string "idempotent" >> skipWsOrComment >> return (Just Idempotent)) <|> return Nothing
   rType <- parseType
   skipWsOrComment
   name <- identifier
@@ -251,7 +273,7 @@ parseMethod = do
   skipWsOrComment >> char ')' 
   excepts <- (skipWsOrComment >> string "throws" >> skipWsOrComment >> parseSepList (char ',') identifier) <|> return []
   skipWsOrComment >> char ';' >> skipWsOrCommentOrSem
-  return $ MethodDecl rType name fields excepts
+  return $ MethodDecl rType name fields excepts annot
 
 parseMethodOrField :: Parser MethodOrFieldDecl
 parseMethodOrField = (parseMethod >>= return . MDecl) <|> (parseSemTermField >>= return . FDecl)

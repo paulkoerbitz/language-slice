@@ -2,6 +2,8 @@ module Language.Slice.Syntax.AST
        ( IncludeDelimiters(..)
        , SliceType(..)
        , SliceDecl(..)
+       , DefaultValue(..)
+       , Annotation(..)
        , FieldDecl(..)
        , MethodDecl(..)
        , MethodOrFieldDecl(..)
@@ -34,8 +36,17 @@ data SliceDecl = ModuleDecl String [SliceDecl]
                | ConstDecl SliceType String SliceExpr
                deriving (Show, Read, Eq)
 
-data FieldDecl = FieldDecl SliceType String deriving (Show, Read, Eq)
+data DefaultValue = DefaultBool Bool
+                  | DefaultString  String
+                  | DefaultInteger Integer
+                  | DefaultDouble  Double
+                  | DefaultIdentifier String
+                  deriving (Show, Read, Eq)
+                           
+data Annotation = Idempotent deriving (Show, Read, Eq)
 
-data MethodDecl = MethodDecl SliceType String [FieldDecl] [String] deriving (Show, Read, Eq)
+data FieldDecl = FieldDecl SliceType String (Maybe DefaultValue) deriving (Show, Read, Eq)
+
+data MethodDecl = MethodDecl SliceType String [FieldDecl] [String] (Maybe Annotation) deriving (Show, Read, Eq)
 
 data MethodOrFieldDecl = MDecl MethodDecl | FDecl FieldDecl deriving (Show, Read, Eq)
