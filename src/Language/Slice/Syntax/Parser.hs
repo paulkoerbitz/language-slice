@@ -6,7 +6,8 @@ module Language.Slice.Syntax.Parser
          parseList,
          parseOnly,
          parseType,
-         parseSemTermField
+         parseSemTermField,
+         parseConst
 --          module Language.Slice.Syntax.AST
        ) where
 
@@ -33,6 +34,7 @@ parseSliceInternal = skipWs >> do
   <|> parseStruct
   <|> parseClass
   <|> parseInterface
+  <|> parseInterfaceF
   <|> parseSequence
   <|> parseDictionary
   <|> parseException
@@ -203,6 +205,12 @@ parseInterface =
   do (name,exts,decls) <- parseExtBlock "interface" (parseList parseMethod)
      return $ InterfaceDecl name exts decls
   <?> "interface"
+  
+parseInterfaceF :: Parser SliceDecl
+parseInterfaceF = do 
+  nm <- "interface " .*> identifier
+  skipWsOrComment >> string ";" >> skipWsOrComment
+  return $ InterfaceFDecl nm
 
 parseException :: Parser SliceDecl
 parseException =  do
@@ -238,18 +246,17 @@ parseField = do
   skipWsOrComment
   return $ FieldDecl type' name Nothing
   
-parseDefValue :: Parser (Maybe DefaultValue)
-parseDefValue = do
+parseSliceVal :: Parser SliceVal
+parseSliceVal = do
   (string "=" >> skipWsOrComment *>
-   ((Just . DefaultBool <$> parseBool)
+   ((SliceBool <$> parseBool)
     <|> do num <- number
            case num of
-             (D dbl) -> return . Just . DefaultDouble $ dbl
-             (I int) -> return . Just . DefaultInteger $ int
-    <|> (Just . DefaultString . unpack . BS.pack <$> parseString)
-    <|> (Just . DefaultIdentifier <$> identifier))
+             (D dbl) -> return . SliceDouble $ dbl
+             (I int) -> return . SliceInteger $ int
+    <|> (SliceStr . unpack . BS.pack <$> parseString)
+    <|> (SliceIdentifier <$> identifier))
    <* skipWsOrComment)
-  <|> return Nothing
   where
     parseBool   = (string "true" >> return True) <|> (string "false" >> return False)
     parseString = "\"" .*> manyTill anyWord8 (string "\"")
@@ -258,7 +265,7 @@ parseSemTermField :: Parser FieldDecl
 parseSemTermField = do
   (FieldDecl type' name _) <- parseField
   skipWsOrComment
-  mDefVal <- parseDefValue
+  mDefVal <- (parseSliceVal >>= return . Just) <|> return Nothing
   skipWsOrComment >> char ';' >> skipWsOrCommentOrSem
   return (FieldDecl type' name mDefVal)
 
@@ -286,3 +293,10 @@ parseIfDef = do
   result <- parseList parseSliceInternal
   skipWsOrComment >> string "#endif" >> skipWsOrComment
   return result
+  
+parseConst :: Parser SliceDecl
+parseConst = do
+  tp <- "const" .*> skipWsOrComment >> parseType
+  nm <- skipWsOrComment >> identifier
+  val <- skipWsOrComment >> parseSliceVal
+  return $ ConstDecl tp nm val

@@ -10,6 +10,7 @@ testCases :: HU.Test
 testCases = HU.TestList
   [ " type 1"          HU.~: Right (STUserDefinedPrx "MyType") HU.@=? parseOnly parseType "MyType*"
   , " field 1"         HU.~: Right (FieldDecl (STUserDefinedPrx "MyType") "MyIdentifier" Nothing) HU.@=? parseOnly parseSemTermField "MyType* MyIdentifier;"
+  , " const 1"         HU.~: Right (ConstDecl STBool "MyBool" (SliceBool True)) HU.@=? parseOnly parseConst "const bool MyBool = true;"
   , " include quotes"  HU.~: Right [IncludeDecl Quotes "some/relative/path.ice"] HU.@=? parseSlice "#include \"some/relative/path.ice\""
   , " include backets" HU.~: Right [IncludeDecl AngleBrackets "some/relative/path.ice"] HU.@=? parseSlice "#include <some/relative/path.ice>"
   , " enum 1"          HU.~: Right [EnumDecl "plain" []] HU.@=? parseSlice "enum plain {};"
@@ -18,8 +19,8 @@ testCases = HU.TestList
   , " enum 4"          HU.~: Right [EnumDecl "MyEnumWith_Underscores" ["Val_1","Val_2"]] HU.@=? parseSlice "enum MyEnumWith_Underscores \n{\n\tVal_1,\n\tVal_2\n};;"      
   , " struct 1"        HU.~: Right [StructDecl "plain" []] HU.@=? parseSlice "struct plain {};"
   , " struct 2"        HU.~: Right [StructDecl "plain" [FieldDecl STBool "myBool" Nothing]] HU.@=? parseSlice "struct plain { bool myBool; };"
-  , " struct 3"        HU.~: Right [StructDecl "plain" [FieldDecl STBool "myBool" (Just (DefaultBool True))]] HU.@=? parseSlice "struct plain { bool myBool = true; };"
-  , " struct 4"        HU.~: Right [StructDecl "plain" [FieldDecl (STUserDefined "MyType") "status" (Just (DefaultIdentifier "MyIdentifier"))]] HU.@=? parseSlice "struct plain { MyType status = MyIdentifier; };"
+  , " struct 3"        HU.~: Right [StructDecl "plain" [FieldDecl STBool "myBool" (Just (SliceBool True))]] HU.@=? parseSlice "struct plain { bool myBool = true; };"
+  , " struct 4"        HU.~: Right [StructDecl "plain" [FieldDecl (STUserDefined "MyType") "status" (Just (SliceIdentifier "MyIdentifier"))]] HU.@=? parseSlice "struct plain { MyType status = MyIdentifier; };"
   , " struct 5"        HU.~: Right [StructDecl "plain" [FieldDecl (STUserDefinedPrx "MyType") "status" Nothing]] HU.@=? parseSlice "struct plain { MyType* status; };"
   , " plain module"    HU.~: Right [ModuleDecl "plain" []] HU.@=? parseSlice "module plain {};"
   , " nested module"   HU.~: Right [ModuleDecl "nested" [ModuleDecl "nested2" []]] HU.@=? parseSlice "module nested { module nested2 {}; };"
