@@ -27,3 +27,4 @@ which is the interface definition language used by the RPC library
 
 - Accept default values for structs
 - Accept idempotent annotation
+- Accept enum with a comma after last

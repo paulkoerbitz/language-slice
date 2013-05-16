@@ -49,7 +49,8 @@ testCases = HU.TestList
 
 fileTestData :: [(String,String)]
 fileTestData = [("test/testSlice01.ice","test/testSlice01.ast")
-               ,("test/testSlice02.ice","test/testSlice02.ast")]
+               ,("test/testSlice02.ice","test/testSlice02.ast")
+               ]
 
 tests :: [Test]
 tests = [testGroup "Basic declaration parsing" $ hUnitTestToTests testCases]
