@@ -12,15 +12,17 @@ module Language.Slice.Syntax.Parser
        ) where
 
 import           Control.Applicative ((<|>),(<$>),(<*>),(<*),(*>))
-import           Control.Monad (liftM)
-import           Language.Slice.Syntax.AST
 import           Data.Attoparsec as AT
 import           Data.Attoparsec.Char8 as ATC8 ((<*.),(.*>), Number(..), number)
+import           Data.Attoparsec.Combinator (sepBy, option)
 import           Data.ByteString.Char8
 import qualified Data.ByteString as BS
 import           Data.Char (ord, chr)
 import           Data.Word (Word8)
 import           Data.Monoid
+
+import           Language.Slice.Syntax.AST
+
 
 -- Final parser
 parseSlice :: ByteString -> Either String [SliceDecl]
@@ -181,7 +183,7 @@ parseInclude =
 
 parseEnum :: Parser SliceDecl
 parseEnum = do
-    (name,decls) <- parseBlock "enum" (parseSepList (char ',') identifier)
+    (name,decls) <- parseBlock "enum" ((liftWs identifier `sepBy` (char ',')) <* option () (char ',' >> return ()))
     return (EnumDecl name decls)
   <?> "enum"
 
