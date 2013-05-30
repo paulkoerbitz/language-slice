@@ -1,67 +1,54 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE OverloadedStrings, FlexibleContexts #-}
 module Language.Slice.Syntax.Parser
-       ( parseSlice,
-         parseMethod,
-         parseField,
-         parseList,
-         parseOnly,
-         parseType,
-         parseSemTermField,
-         parseConst
---          module Language.Slice.Syntax.AST
+       ( parse
+       , parseFile  
+       , parseMethod
+       , parseField
+       , parseList
+       -- , parseOnly
+       , parseType
+       , parseSemTermField
+       , parseConst
+       , parseIfDef
+       , parseSlice
+       , parseSlices
        ) where
 
 import           Control.Applicative ((<|>),(<$>),(<*>),(<*),(*>))
-import           Data.Attoparsec as AT
-import           Data.Attoparsec.Char8 as ATC8 ((<*.),(.*>), Number(..), number)
-import           Data.Attoparsec.Combinator (sepBy, option)
-import           Data.ByteString.Char8
-import qualified Data.ByteString as BS
-import           Data.Char (ord, chr)
-import           Data.Word (Word8)
+import           Data.Functor.Identity (Identity)
 import           Data.Monoid
+import qualified Text.Parsec as P
+import qualified Text.Parsec.ByteString as PBS
 
-import           Language.Slice.Syntax.AST
+import qualified Language.Slice.Syntax.AST as AST
 
+type Parser = PBS.Parser
 
--- Final parser
-parseSlice :: ByteString -> Either String [SliceDecl]
-parseSlice = parseOnly $ parseIfDef <|> parseList parseSliceInternal
+parse :: P.Stream s Identity t => P.Parsec s () a -> P.SourceName -> s -> Either P.ParseError a
+parse = P.parse
 
-parseSliceInternal :: Parser SliceDecl
-parseSliceInternal = skipWs >> do
-  parseModule
-  <|> parseInclude
-  <|> parseEnum
-  <|> parseStruct
-  <|> parseClass
-  <|> parseInterface
-  <|> parseInterfaceF
-  <|> parseSequence
-  <|> parseDictionary
-  <|> parseException
-  <?> "top level" 
+parseFile :: String -> IO (Either P.ParseError [AST.SliceDecl])
+parseFile = PBS.parseFromFile parseSlices
 
-c2w :: Char -> Word8
-c2w = fromIntegral . ord
+parseSlices :: Parser [AST.SliceDecl]
+parseSlices = P.try parseIfDef <|> P.many1 parseSlice
 
-w2c :: Word8 -> Char
-w2c = chr . fromIntegral
+parseSlice :: Parser AST.SliceDecl
+parseSlice = P.spaces >> P.try (do
+  (    parseModule
+   <|> parseInclude
+   <|> parseEnum
+   <|> parseStruct
+   <|> parseClass
+   <|> parseInterface
+   <|> parseInterfaceF
+   <|> parseSequence
+   <|> parseDictionary
+   <|> parseException)
+  P.<?> "top level")
 
-char :: Char -> Parser Word8
-char c = word8 . c2w $ c
-
-isWs :: Word8 -> Bool
-isWs w = w == 32 || w == 9 || w == 10 || w == 12
-
-isWsOrSem :: Word8 -> Bool
-isWsOrSem w = w == 32 || w == 9 || w == 10 || w == 12 || w == 59 
-
-skipWs :: Parser ()
-skipWs = skipWhile isWs
-
-skipWsOrSem :: Parser ()
-skipWsOrSem = skipWhile isWsOrSem
+(.*>) :: String -> Parser a -> Parser a
+s .*> p = P.string s *> p
 
 (<+>) :: Monoid a => Parser a -> Parser a -> Parser a
 p1 <+> p2 = (<>) <$> p1 <*> p2
@@ -70,27 +57,20 @@ parseEither :: Monoid a => Parser a -> Parser a -> Parser a
 parseEither p1 p2 = ((p1 <|> p2) <+> parseEither p1 p2) <|> return mempty
 
 parseAny :: Monoid a => [Parser a] -> Parser a
-parseAny ps = choice ps <+> parseAny ps <|> return mempty
+parseAny ps = P.choice ps <+> parseAny ps <|> return mempty
 
---parseEither p1 p2 = (p1 <|> p2) <|> return mempty
---parseEither p1 p2 = do r1 <- (p1 <|> p2) 
---                       r2 <- parseEither p1 p2
---                       return (r1 <> r2)
---                    <|> return mempty
+parseWs :: Parser String
+parseWs = P.many1 P.space
 
-parseWs :: Parser ByteString
-parseWs = takeWhile1 isWs
-
-parseComment :: Parser ByteString
-parseComment = BS.pack <$> 
-               (("/*" .*> manyTill anyWord8 (string "*/")) <|> 
-                ("//" .*> manyTill anyWord8 (string "\n")))
+parseComment :: Parser String
+parseComment =     ("/*" .*> P.manyTill P.anyToken (P.try $ P.string "*/")) 
+               <|> ("//" .*> P.manyTill P.anyToken (P.try $ P.string "\n"))
                                                
-parseWsOrComment :: Parser ByteString
+parseWsOrComment :: Parser String
 parseWsOrComment = parseEither parseComment parseWs
 
-parseWsOrCommentOrSem :: Parser ByteString
-parseWsOrCommentOrSem = parseAny [parseWs, parseComment, (string ";")]
+parseWsOrCommentOrSem :: Parser String
+parseWsOrCommentOrSem = parseAny [parseWs, parseComment, (P.string ";")]
 
 skipWsOrComment :: Parser ()
 skipWsOrComment = parseWsOrComment >> return ()
@@ -98,207 +78,229 @@ skipWsOrComment = parseWsOrComment >> return ()
 skipWsOrCommentOrSem :: Parser ()
 skipWsOrCommentOrSem = parseWsOrCommentOrSem >> return ()
 
-identifier :: Parser String
-identifier = AT.takeWhile1 (inClass "a-zA-Z0-9_:") >>= return . unpack
+chars ::String
+chars = "_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-parseType :: Parser SliceType
-parseType = ((string "void" >> return STVoid)
-             <|> (string "bool" >> return STBool)
-             <|> (string "byte" >> return STByte)
-             <|> (string "int" >> return STInt)
-             <|> (string "long" >> return STLong)
-             <|> (string "float" >> return STFloat)
-             <|> (string "double" >> return STDouble)
-             <|> (string "string" >> return STString)
+digits :: String
+digits = "0123456789"
+
+identifierStartChars :: String
+identifierStartChars = chars ++ digits ++ "_"
+
+identifierChars :: String
+identifierChars = chars ++ digits ++ "_:"
+
+identifier :: Parser String
+identifier = do c  <- P.oneOf identifierStartChars
+                cs <- P.many $ P.oneOf identifierChars
+                return (c:cs)
+
+parseType :: Parser AST.SliceType
+parseType = ((P.string "void" >> return AST.STVoid)
+             <|> (P.string "bool" >> return AST.STBool)
+             <|> (P.string "byte" >> return AST.STByte)
+             <|> (P.string "int" >> return AST.STInt)
+             <|> (P.string "long" >> return AST.STLong)
+             <|> (P.string "float" >> return AST.STFloat)
+             <|> (P.string "double" >> return AST.STDouble)
+             <|> (P.string "string" >> return AST.STString)
              <|> do tn <- identifier
                     skipWsOrComment
-                    (char '*' >> return (STUserDefinedPrx tn)) <|> return (STUserDefined tn))
-            <?> "type"
+                    (P.char '*' >> return (AST.STUserDefinedPrx tn)) <|> return (AST.STUserDefined tn))
+            P.<?> "type"
             
 liftWs :: Parser a -> Parser a
-liftWs parser = skipWsOrComment >> parser >>= \i -> skipWsOrComment >> return i
+liftWs parser = skipWsOrComment *> parser <* skipWsOrComment
+
+charWs :: Char -> Parser Char
+charWs = liftWs . P.char
                    
 parseSepList :: Parser a -> Parser b -> Parser [b]
-parseSepList sep parser = go [] <?> "sep list"
+parseSepList sep parser = go [] P.<?> "sep list"
   where
     go lst = do i <- liftWs parser 
                 (sep >> go (i:lst)) <|> (return (Prelude.reverse $ i:lst))
              <|> if Prelude.null lst then return [] else fail " parseSepList: extra seperator"
 
 parseList :: Parser b -> Parser [b]
-parseList parser = go [] <?> "list"
+parseList parser = go [] P.<?> "list"
   where
     go lst = do i <- liftWs parser
                 go (i:lst)
              <|>
              (return $ Prelude.reverse lst)
 
-parseBlock :: ByteString -> Parser a -> Parser (String, a)
+parseBlock :: String -> Parser a -> Parser (String, a)
 parseBlock kw parser = do
-    string kw >> skipWsOrComment
+    P.string kw >> skipWsOrComment
     name <- identifier
-    skipWsOrComment >> char '{'
-    decls <- parser
-    skipWsOrComment >> char '}' >> skipWsOrSem
+    decls <- P.between (charWs '{') (charWs '}') parser <* (liftWs $ P.char ';')
     return (name,decls)
-  <?> "block"
+  P.<?> kw
 
-parseExtBlock :: ByteString -> Parser a -> Parser (String, [String], a)
+parseExtBlock :: String -> Parser a -> Parser (String, [String], a)
 parseExtBlock kw parser = 
-  do string kw >> skipWsOrComment
+  do P.string kw >> skipWsOrComment
      name <- identifier
      skipWsOrComment
      exts <- parseExtensions
-     skipWsOrComment >> char '{'
+     _ <- skipWsOrComment >> P.char '{'
      decls <- parser
-     skipWsOrComment >> char '}' >> skipWsOrComment >> char ';' >> skipWsOrComment
+     _ <- skipWsOrComment >> P.char '}' >> skipWsOrComment >> P.char ';' >> skipWsOrComment
      return (name, exts, decls)
-  <?> "ext block"
+  P.<?> "ext block"
   where
     parseExtensions = 
-      do string "extends" >> skipWsOrComment
-         parseSepList (char ',') identifier
+      do P.string "extends" >> skipWsOrComment
+         parseSepList (P.char ',') identifier
       <|> return []
 
-parseModule :: Parser SliceDecl
+parseModule :: Parser AST.SliceDecl
 parseModule = do
-    (name,decls) <- parseBlock "module" (parseSepList skipWsOrComment parseSliceInternal)
-    return (ModuleDecl name decls)
-  <?> "module"
+    (name,decls) <- parseBlock "module" (parseSepList skipWsOrComment parseSlice)
+    return (AST.ModuleDecl name decls)
+  P.<?> "module"
 
-parseInclude :: Parser SliceDecl
+parseInclude :: Parser AST.SliceDecl
 parseInclude = 
-  do string "#include" >> skipWsOrComment
-     c <- char '"' <|> char '<'
-     path <- AT.takeWhile $ inClass "-_a-zA-Z0-9./"
-     char (closingChar (w2c c))
-     skipWsOrCommentOrSem
-     case (w2c c) of
-       '"' -> return $ IncludeDecl Quotes (unpack path)
-       '<' -> return $ IncludeDecl AngleBrackets (unpack path)
-  <?> "include"
-  where
-    closingChar '"' = '"'
-    closingChar '<' = '>'
+  do P.string "#include" >> skipWsOrComment
+     (do fn <- P.between (P.char '"') (P.char  '"') (P.many1 $ P.oneOf (identifierChars ++ "-_./"))
+         return $ AST.IncludeDecl AST.Quotes fn
+      <|>
+      do fn <- P.between (P.char '<') (P.char  '>') (P.many1 $ P.oneOf (identifierChars ++ "-_./"))
+         return $ AST.IncludeDecl AST.AngleBrackets fn)
+  P.<?> "include"
 
-parseEnum :: Parser SliceDecl
+parseEnum :: Parser AST.SliceDecl
 parseEnum = do
-    (name,decls) <- parseBlock "enum" ((liftWs identifier `sepBy` (char ',')) <* option () (char ',' >> return ()))
-    return (EnumDecl name decls)
-  <?> "enum"
+    (name,decls) <- parseBlock "enum" ((liftWs identifier `P.sepBy` (P.char ',')) <* P.optional (P.char ','))
+    return (AST.EnumDecl name decls)
+  P.<?> "enum"
 
-parseStruct :: Parser SliceDecl
+parseStruct :: Parser AST.SliceDecl
 parseStruct = do
     (name,decls) <- parseBlock "struct" (parseList parseSemTermField)
-    return (StructDecl name decls)
-  <?> "struct"
+    return (AST.StructDecl name decls)
+  P.<?> "struct"
 
-parseClass :: Parser SliceDecl
+parseClass :: Parser AST.SliceDecl
 parseClass = do
     (name,exts,decls) <- parseExtBlock "class" (parseList parseMethodOrField)
-    return $ ClassDecl name (safeHead exts) decls
-  <?> "class"
+    return $ AST.ClassDecl name (safeHead exts) decls
+  P.<?> "class"
   where
     safeHead []     = Nothing
-    safeHead (x:xs) = Just x
+    safeHead (x:_)  = Just x
 
-parseInterface :: Parser SliceDecl
+parseInterface :: Parser AST.SliceDecl
 parseInterface = 
   do (name,exts,decls) <- parseExtBlock "interface" (parseList parseMethod)
-     return $ InterfaceDecl name exts decls
-  <?> "interface"
+     return $ AST.InterfaceDecl name exts decls
+  P.<?> "interface"
   
-parseInterfaceF :: Parser SliceDecl
+parseInterfaceF :: Parser AST.SliceDecl
 parseInterfaceF = do 
-  nm <- "interface " .*> identifier
-  skipWsOrComment >> string ";" >> skipWsOrComment
-  return $ InterfaceFDecl nm
+  nm <- P.string "interface " *> identifier
+  skipWsOrComment >> P.string ";" >> skipWsOrComment
+  return $ AST.InterfaceFDecl nm
 
-parseException :: Parser SliceDecl
+parseException :: Parser AST.SliceDecl
 parseException =  do
     (name,exts,decls) <- parseExtBlock "exception" (parseList parseSemTermField)
-    return $ ExceptionDecl name exts decls
-  <?> "interface"
+    return $ AST.ExceptionDecl name exts decls
+  P.<?> "interface"
 
-parseSequence :: Parser SliceDecl
+parseSequence :: Parser AST.SliceDecl
 parseSequence = do
-  string "sequence<"
+  _ <- P.string "sequence<"
   type' <- parseType
-  char '>' >> skipWsOrComment
+  _ <- P.char '>' >> skipWsOrComment
   name <- identifier
-  skipWsOrComment >> char ';' >> skipWsOrCommentOrSem
-  return $ SequenceDecl type' name
+  _ <- skipWsOrComment >> P.char ';' >> skipWsOrCommentOrSem
+  return $ AST.SequenceDecl type' name
 
-parseDictionary :: Parser SliceDecl
+parseDictionary :: Parser AST.SliceDecl
 parseDictionary = do
-  string "dictionary<"
+  _ <- P.string "dictionary<"
   type1 <- parseType
-  skipWsOrComment >> char ',' >> skipWsOrComment
+  skipWsOrComment >> P.char ',' >> skipWsOrComment
   type2 <- parseType
-  char '>' >> skipWsOrComment
+  P.char '>' >> skipWsOrComment
   name <- identifier
-  skipWsOrComment >> char ';' >> skipWsOrCommentOrSem
-  return $ DictionaryDecl type1 type2 name
+  skipWsOrComment >> P.char ';' >> skipWsOrCommentOrSem
+  return $ AST.DictionaryDecl type1 type2 name
 
-parseField :: Parser FieldDecl
+parseField :: Parser AST.FieldDecl
 parseField = do
   type' <- parseType
   skipWsOrComment
   name <- identifier
   skipWsOrComment
-  return $ FieldDecl type' name Nothing
+  return $ AST.FieldDecl type' name Nothing
   
-parseSliceVal :: Parser SliceVal
+data Number = I Integer
+            | D Double
+
+parseNumber :: Parser Number
+parseNumber = 
+  do preDec <- P.many1 P.digit
+     (do decDot <- P.char '.'
+         postDec <- P.many1 P.digit
+         return (D $ read $ preDec ++ [decDot] ++ postDec)
+      <|> 
+      return (I $ read $ preDec))
+  
+parseSliceVal :: Parser AST.SliceVal
 parseSliceVal = do
-  (string "=" >> skipWsOrComment *>
-   ((SliceBool <$> parseBool)
-    <|> do num <- number
-           case num of
-             (D dbl) -> return . SliceDouble $ dbl
-             (I int) -> return . SliceInteger $ int
-    <|> (SliceStr . unpack . BS.pack <$> parseString)
-    <|> (SliceIdentifier <$> identifier))
+  ((P.string "=" >> skipWsOrComment) *>
+   ((AST.SliceBool <$> parseBool)
+    <|> (do num <- parseNumber
+            case num of
+              (D dbl) -> return . AST.SliceDouble $ dbl
+              (I int) -> return . AST.SliceInteger $ int)
+    <|> (AST.SliceStr <$> parseString)
+    <|> (AST.SliceIdentifier <$> identifier))
    <* skipWsOrComment)
   where
-    parseBool   = (string "true" >> return True) <|> (string "false" >> return False)
-    parseString = "\"" .*> manyTill anyWord8 (string "\"")
+    parseBool   = (P.string "true" >> return True) <|> (P.string "false" >> return False)
+    parseString = P.string "\"" *> P.manyTill undefined (P.string "\"")
 
-parseSemTermField :: Parser FieldDecl
+parseSemTermField :: Parser AST.FieldDecl
 parseSemTermField = do
-  (FieldDecl type' name _) <- parseField
+  (AST.FieldDecl type' name _) <- parseField
   skipWsOrComment
   mDefVal <- (parseSliceVal >>= return . Just) <|> return Nothing
-  skipWsOrComment >> char ';' >> skipWsOrCommentOrSem
-  return (FieldDecl type' name mDefVal)
+  skipWsOrComment >> P.char ';' >> skipWsOrCommentOrSem
+  return (AST.FieldDecl type' name mDefVal)
 
-parseMethod :: Parser MethodDecl
+parseMethod :: Parser AST.MethodDecl
 parseMethod = do
-  annot <- (string "idempotent" >> skipWsOrComment >> return (Just Idempotent)) <|> return Nothing
+  annot <- (P.string "idempotent" >> skipWsOrComment >> return (Just AST.Idempotent)) <|> return Nothing
   rType <- parseType
   skipWsOrComment
   name <- identifier
-  skipWsOrComment >> char '('
-  fields <- parseSepList (char ',') parseField
-  skipWsOrComment >> char ')' 
-  excepts <- (skipWsOrComment >> string "throws" >> skipWsOrComment >> parseSepList (char ',') identifier) <|> return []
-  skipWsOrComment >> char ';' >> skipWsOrCommentOrSem
-  return $ MethodDecl rType name fields excepts annot
+  _ <- skipWsOrComment >> P.char '('
+  fields <- parseSepList (P.char ',') parseField
+  _ <- skipWsOrComment >> P.char ')' 
+  excepts <- (skipWsOrComment >> P.string "throws" >> skipWsOrComment >> parseSepList (P.char ',') identifier) <|> return []
+  skipWsOrComment >> P.char ';' >> skipWsOrCommentOrSem
+  return $ AST.MethodDecl rType name fields excepts annot
 
-parseMethodOrField :: Parser MethodOrFieldDecl
-parseMethodOrField = (parseMethod >>= return . MDecl) <|> (parseSemTermField >>= return . FDecl)
+parseMethodOrField :: Parser AST.MethodOrFieldDecl
+parseMethodOrField = (parseMethod >>= return . AST.MDecl) <|> (parseSemTermField >>= return . AST.FDecl)
 
-parseIfDef :: Parser [SliceDecl]
+parseIfDef :: Parser [AST.SliceDecl]
 parseIfDef = do
-  skipWsOrComment >> string "#ifndef" >> skipWsOrComment
+  skipWsOrComment >> P.string "#ifndef" >> skipWsOrComment
   guard <- identifier
-  skipWsOrComment >> string "#define" >> skipWsOrComment >> string (pack guard) >> skipWsOrComment
-  result <- parseList parseSliceInternal
-  skipWsOrComment >> string "#endif" >> skipWsOrComment
+  skipWsOrComment >> P.string "#define" >> skipWsOrComment >> P.string guard >> skipWsOrComment
+  result <- parseList parseSlice
+  skipWsOrComment >> P.string "#endif" >> skipWsOrComment
   return result
   
-parseConst :: Parser SliceDecl
+parseConst :: Parser AST.SliceDecl
 parseConst = do
   tp <- "const" .*> skipWsOrComment >> parseType
   nm <- skipWsOrComment >> identifier
   val <- skipWsOrComment >> parseSliceVal
-  return $ ConstDecl tp nm val
+  return $ AST.ConstDecl tp nm val
