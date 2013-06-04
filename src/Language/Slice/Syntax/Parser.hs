@@ -5,20 +5,22 @@ module Language.Slice.Syntax.Parser
        , parseMethod
        , parseField
        , parseList
-       -- , parseOnly
        , parseType
        , parseSemTermField
        , parseConst
        , parseIfDef
        , parseSlice
        , parseSlices
+       , SyntaxError(..)
        ) where
 
 import           Control.Applicative ((<|>),(<$>),(<*>),(<*),(*>))
 import           Data.Functor.Identity (Identity)
+import           Data.List (intercalate)
 import           Data.Monoid
 import qualified Text.Parsec as P
 import qualified Text.Parsec.ByteString as PBS
+import qualified Text.Parsec.Error as PE
 
 import qualified Language.Slice.Syntax.AST as AST
 
@@ -27,25 +29,48 @@ type Parser = PBS.Parser
 parse :: P.Stream s Identity t => P.Parsec s () a -> P.SourceName -> s -> Either P.ParseError a
 parse = P.parse
 
-parseFile :: String -> IO (Either P.ParseError [AST.SliceDecl])
-parseFile = PBS.parseFromFile parseSlices
+data SyntaxError = SyntaxError { ctxt :: String, pos :: P.SourcePos, msgs :: [PE.Message] }
+                 deriving (Eq)
+
+instance Show SyntaxError where
+  show (SyntaxError ln p m) = 
+    (P.sourceName p) ++ ":" ++ (show $ P.sourceLine p) ++ ":" ++ (show $ P.sourceColumn p) ++
+    ": " ++ PE.showErrorMessages "," "Unknown error" "expected:" "unexpected:" "end of file" m ++
+    "\n" ++ ln ++ "\n" ++ genIdnt [] sc ln ++ "^___\n"
+    where
+      sc    = P.sourceColumn p - 1
+      genIdnt res n ('\t':xs) | n>0 = genIdnt ('\t':res) (n-8) xs
+      genIdnt res n (x:xs)    | n>0 = genIdnt (' ':res) (n-1) xs
+      genIdnt res _ _               = reverse res
+        
+
+parseFile :: String -> IO (Either SyntaxError [AST.SliceDecl])
+parseFile file = do
+  parseResult <- PBS.parseFromFile parseSlices file
+  case parseResult of
+    Left err      -> do
+      fileData <- readFile file
+      let pos'  = PE.errorPos err
+          msgs' = PE.errorMessages err
+          line  = head $ drop (P.sourceLine pos' - 1) $ lines fileData
+      return . Left $ SyntaxError line pos' msgs'
+    (Right res) -> return $ Right res
 
 parseSlices :: Parser [AST.SliceDecl]
 parseSlices = P.try parseIfDef <|> P.many1 parseSlice
 
 parseSlice :: Parser AST.SliceDecl
-parseSlice = P.spaces >> P.try (do
-  (    parseModule
-   <|> parseInclude
-   <|> parseEnum
-   <|> parseStruct
-   <|> parseClass
-   <|> parseInterface
-   <|> parseInterfaceF
-   <|> parseSequence
-   <|> parseDictionary
-   <|> parseException)
-  P.<?> "top level")
+parseSlice = P.spaces >> (do
+  (    P.try parseModule
+   <|> P.try parseInclude
+   <|> P.try parseEnum
+   <|> P.try parseStruct
+   <|> P.try parseClass
+   <|> P.try parseInterface
+   <|> P.try parseInterfaceF
+   <|> P.try parseSequence
+   <|> P.try parseDictionary
+   <|> P.try parseException))
 
 (.*>) :: String -> Parser a -> Parser a
 s .*> p = P.string s *> p
@@ -63,8 +88,8 @@ parseWs :: Parser String
 parseWs = P.many1 P.space
 
 parseComment :: Parser String
-parseComment =     ("/*" .*> P.manyTill P.anyToken (P.try $ P.string "*/")) 
-               <|> ("//" .*> P.manyTill P.anyToken (P.try $ P.string "\n"))
+parseComment =     P.try ("/*" .*> P.manyTill P.anyToken (P.try $ P.string "*/")) 
+               <|> P.try ("//" .*> P.manyTill P.anyToken (P.try $ P.string "\n"))
                                                
 parseWsOrComment :: Parser String
 parseWsOrComment = parseEither parseComment parseWs
@@ -96,17 +121,17 @@ identifier = do c  <- P.oneOf identifierStartChars
                 return (c:cs)
 
 parseType :: Parser AST.SliceType
-parseType = ((P.string "void" >> return AST.STVoid)
-             <|> (P.string "bool" >> return AST.STBool)
-             <|> (P.string "byte" >> return AST.STByte)
-             <|> (P.string "int" >> return AST.STInt)
-             <|> (P.string "long" >> return AST.STLong)
-             <|> (P.string "float" >> return AST.STFloat)
-             <|> (P.string "double" >> return AST.STDouble)
-             <|> (P.string "string" >> return AST.STString)
-             <|> do tn <- identifier
-                    skipWsOrComment
-                    (P.char '*' >> return (AST.STUserDefinedPrx tn)) <|> return (AST.STUserDefined tn))
+parseType = (    P.try (P.string "void" >> return AST.STVoid)
+             <|> P.try (P.string "bool" >> return AST.STBool)
+             <|> P.try (P.string "byte" >> return AST.STByte)
+             <|> P.try (P.string "int" >> return AST.STInt)
+             <|> P.try (P.string "long" >> return AST.STLong)
+             <|> P.try (P.string "float" >> return AST.STFloat)
+             <|> P.try (P.string "double" >> return AST.STDouble)
+             <|> P.try (P.string "string" >> return AST.STString)
+             <|> P.try (do tn <- identifier
+                           skipWsOrComment
+                           (P.char '*' >> return (AST.STUserDefinedPrx tn)) <|> return (AST.STUserDefined tn)))
             P.<?> "type"
             
 liftWs :: Parser a -> Parser a
@@ -116,14 +141,14 @@ charWs :: Char -> Parser Char
 charWs = liftWs . P.char
                    
 parseSepList :: Parser a -> Parser b -> Parser [b]
-parseSepList sep parser = go [] P.<?> "sep list"
+parseSepList sep parser = go [] 
   where
     go lst = do i <- liftWs parser 
                 (sep >> go (i:lst)) <|> (return (Prelude.reverse $ i:lst))
              <|> if Prelude.null lst then return [] else fail " parseSepList: extra seperator"
 
 parseList :: Parser b -> Parser [b]
-parseList parser = go [] P.<?> "list"
+parseList parser = go []
   where
     go lst = do i <- liftWs parser
                 go (i:lst)
@@ -148,7 +173,6 @@ parseExtBlock kw parser =
      decls <- parser
      _ <- skipWsOrComment >> P.char '}' >> skipWsOrComment >> P.char ';' >> skipWsOrComment
      return (name, exts, decls)
-  P.<?> "ext block"
   where
     parseExtensions = 
       do P.string "extends" >> skipWsOrComment
@@ -287,7 +311,7 @@ parseMethod = do
   return $ AST.MethodDecl rType name fields excepts annot
 
 parseMethodOrField :: Parser AST.MethodOrFieldDecl
-parseMethodOrField = (parseMethod >>= return . AST.MDecl) <|> (parseSemTermField >>= return . AST.FDecl)
+parseMethodOrField = P.try (parseMethod >>= return . AST.MDecl) <|> P.try (parseSemTermField >>= return . AST.FDecl)
 
 parseIfDef :: Parser [AST.SliceDecl]
 parseIfDef = do

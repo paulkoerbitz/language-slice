@@ -65,9 +65,9 @@ tests = [testGroup "Basic declaration parsing" $ hUnitTestToTests testCases]
 
 main :: IO ()
 main = do
-  slcData <- mapM (BS.readFile . fst) fileTestData
   astData <- mapM (readFile . snd) fileTestData
-  let fileTests = [] -- [testGroup "File tests" $ hUnitTestToTests $ HU.TestList $ 
-                     --  zipWith3 (\(nm,_) str ast -> nm HU.~: (read ast :: Either String [SliceDecl]) HU.@=? parseFile str) fileTestData slcData astData]
+  parseResults <- mapM (parseFile . fst) fileTestData
+  let fileTests = [testGroup "File tests" $ hUnitTestToTests $ HU.TestList $ 
+                   zipWith3 (\(nm,_) ast result -> nm HU.~: Right (read ast :: [SliceDecl]) HU.@=? result) fileTestData  astData parseResults]
       allTests  = tests ++ fileTests
   defaultMain allTests
