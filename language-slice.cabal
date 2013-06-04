@@ -1,5 +1,5 @@
 name:                language-slice
-version:             0.2.2.0
+version:             0.3.0.0
 synopsis:            AST and parser for the ZeroC Slice language (Specification language for ICE)
 description:         AST and parser for the ZeroC Slice language (Specification language for ICE)
 homepage:            https://github.com/paulkoerbitz/language-slice
