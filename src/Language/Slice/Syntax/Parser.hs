@@ -16,7 +16,6 @@ module Language.Slice.Syntax.Parser
 
 import           Control.Applicative ((<|>),(<$>),(<*>),(<*),(*>))
 import           Data.Functor.Identity (Identity)
-import           Data.List (intercalate)
 import           Data.Monoid
 import qualified Text.Parsec as P
 import qualified Text.Parsec.ByteString as PBS
@@ -40,7 +39,7 @@ instance Show SyntaxError where
     where
       sc    = P.sourceColumn p - 1
       genIdnt res n ('\t':xs) | n>0 = genIdnt ('\t':res) (n-8) xs
-      genIdnt res n (x:xs)    | n>0 = genIdnt (' ':res) (n-1) xs
+      genIdnt res n (_:xs)    | n>0 = genIdnt (' ':res) (n-1) xs
       genIdnt res _ _               = reverse res
         
 

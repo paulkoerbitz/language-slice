@@ -32,6 +32,7 @@ Test-Suite test-parser
                      test-framework-hunit,
                      bytestring,
                      parsec >= 3,
+                     transformers >= 0.3,
                      language-slice
   x-uses-tf:         true
   ghc-options:       -Wall

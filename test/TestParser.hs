@@ -1,17 +1,19 @@
-{-# LANGUAGE OverloadedStrings #-}
-import qualified Data.ByteString                      as BS
+{-# LANGUAGE OverloadedStrings, FlexibleContexts #-}
+import           Data.Functor.Identity (Identity)
 import qualified Test.HUnit                           as HU
 import           Test.Framework
 import           Test.Framework.Providers.HUnit
 import           Language.Slice.Syntax.Parser
 import           Language.Slice.Syntax.AST
 
--- import qualified Text.Parsec as P
+import qualified Text.Parsec as P
 import qualified Text.Parsec.Error as PE
 
 instance Eq PE.ParseError where
   e1 == e2 = PE.errorPos e1 == PE.errorPos e2 && PE.errorMessages e1 == PE.errorMessages e2
   
+testParse :: P.Stream s Data.Functor.Identity.Identity t =>
+             P.Parsec s () a -> s -> Either PE.ParseError a  
 testParse p = parse p "String"
 
 testCases :: HU.Test
