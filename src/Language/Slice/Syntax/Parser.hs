@@ -4,7 +4,6 @@ module Language.Slice.Syntax.Parser
        , parseFile  
        , parseMethod
        , parseField
-       , parseList
        , parseType
        , parseSemTermField
        , parseConst
@@ -41,7 +40,6 @@ instance Show SyntaxError where
       genIdnt res n ('\t':xs) | n>0 = genIdnt ('\t':res) (n-8) xs
       genIdnt res n (_:xs)    | n>0 = genIdnt (' ':res) (n-1) xs
       genIdnt res _ _               = reverse res
-        
 
 parseFile :: String -> IO (Either SyntaxError [AST.SliceDecl])
 parseFile file = do
@@ -146,14 +144,6 @@ parseSepList sep parser = go []
                 (sep >> go (i:lst)) <|> (return (Prelude.reverse $ i:lst))
              <|> if Prelude.null lst then return [] else fail " parseSepList: extra seperator"
 
-parseList :: Parser b -> Parser [b]
-parseList parser = go []
-  where
-    go lst = do i <- liftWs parser
-                go (i:lst)
-             <|>
-             (return $ Prelude.reverse lst)
-
 parseBlock :: String -> Parser a -> Parser (String, a)
 parseBlock kw parser = do
     P.string kw >> skipWsOrComment
@@ -202,14 +192,14 @@ parseEnum = do
 
 parseStruct :: Parser AST.SliceDecl
 parseStruct = do
-    (name,decls) <- parseBlock "struct" (parseList parseSemTermField)
+    (name,decls) <- parseBlock "struct" (P.many $ liftWs parseSemTermField)
     return (AST.StructDecl name decls)
   P.<?> "struct"
 
 parseClass :: Parser AST.SliceDecl
 parseClass = do
-    (name,exts,decls) <- parseExtBlock "class" (parseList parseMethodOrField)
-    return $ AST.ClassDecl name (safeHead exts) decls
+  (name,exts,decls) <- parseExtBlock "class" (P.many $ liftWs parseMethodOrField)
+  return $ AST.ClassDecl name (safeHead exts) decls
   P.<?> "class"
   where
     safeHead []     = Nothing
@@ -217,7 +207,7 @@ parseClass = do
 
 parseInterface :: Parser AST.SliceDecl
 parseInterface = 
-  do (name,exts,decls) <- parseExtBlock "interface" (parseList parseMethod)
+  do (name,exts,decls) <- parseExtBlock "interface" (P.many $ liftWs parseMethod)
      return $ AST.InterfaceDecl name exts decls
   P.<?> "interface"
   
@@ -229,9 +219,8 @@ parseInterfaceF = do
 
 parseException :: Parser AST.SliceDecl
 parseException =  do
-    (name,exts,decls) <- parseExtBlock "exception" (parseList parseSemTermField)
+    (name,exts,decls) <- parseExtBlock "exception" (P.many $ liftWs parseSemTermField)
     return $ AST.ExceptionDecl name exts decls
-  P.<?> "interface"
 
 parseSequence :: Parser AST.SliceDecl
 parseSequence = do
@@ -317,7 +306,7 @@ parseIfDef = do
   skipWsOrComment >> P.string "#ifndef" >> skipWsOrComment
   guard <- identifier
   skipWsOrComment >> P.string "#define" >> skipWsOrComment >> P.string guard >> skipWsOrComment
-  result <- parseList parseSlice
+  result <- P.many $ liftWs parseSlice
   skipWsOrComment >> P.string "#endif" >> skipWsOrComment
   return result
   
