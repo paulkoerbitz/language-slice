@@ -148,7 +148,7 @@ parseBlock :: String -> Parser a -> Parser (String, a)
 parseBlock kw parser = do
     P.string kw >> skipWsOrComment
     name <- identifier
-    decls <- P.between (charWs '{') (charWs '}') parser <* (liftWs $ P.char ';')
+    decls <- P.between (charWs '{') (charWs '}') parser <* charWs ';'
     return (name,decls)
   P.<?> kw
 
