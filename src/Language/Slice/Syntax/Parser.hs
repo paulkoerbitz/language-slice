@@ -273,7 +273,7 @@ parseSliceVal = do
    <* skipWsOrComment)
   where
     parseBool   = (P.string "true" >> return True) <|> (P.string "false" >> return False)
-    parseString = P.string "\"" *> P.manyTill undefined (P.string "\"")
+    parseString = P.string "\"" *> P.manyTill P.anyChar (P.string "\"")
 
 parseSemTermField :: Parser AST.FieldDecl
 parseSemTermField = do
