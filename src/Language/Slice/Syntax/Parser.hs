@@ -156,11 +156,9 @@ parseExtBlock :: String -> Parser a -> Parser (String, [String], a)
 parseExtBlock kw parser = 
   do P.string kw >> skipWsOrComment
      name <- identifier
+     exts <- skipWsOrComment *> parseExtensions <* skipWsOrComment
+     decls <- P.between (charWs '{') (charWs '}') parser <* charWs ';'
      skipWsOrComment
-     exts <- parseExtensions
-     _ <- skipWsOrComment >> P.char '{'
-     decls <- parser
-     _ <- skipWsOrComment >> P.char '}' >> skipWsOrComment >> P.char ';' >> skipWsOrComment
      return (name, exts, decls)
   where
     parseExtensions = 
