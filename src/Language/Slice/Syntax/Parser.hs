@@ -295,7 +295,7 @@ parseMethod = do
   _ <- skipWsOrComment >> P.char '('
   fields <- parseSepList (P.char ',') parseField
   _ <- skipWsOrComment >> P.char ')' 
-  excepts <- (skipWsOrComment >> P.string "throws" >> skipWsOrComment >> parseSepList (P.char ',') identifier) <|> return []
+  excepts <- (skipWsOrComment >> P.string "throws" >> skipWsOrComment >> parseSepList (P.char ',') nsQualIdent) <|> return []
   skipWsOrComment >> P.char ';' >> skipWsOrCommentOrSem
   return $ AST.MethodDecl rType name fields excepts annot
 

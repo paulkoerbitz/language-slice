@@ -52,6 +52,6 @@ data Annotation = Idempotent deriving (Show, Read, Eq)
 
 data FieldDecl = FieldDecl SliceType Ident (Maybe SliceVal) deriving (Show, Read, Eq)
 
-data MethodDecl = MethodDecl SliceType Ident [FieldDecl] [Ident] (Maybe Annotation) deriving (Show, Read, Eq)
+data MethodDecl = MethodDecl SliceType Ident [FieldDecl] [NsQualIdent] (Maybe Annotation) deriving (Show, Read, Eq)
 
 data MethodOrFieldDecl = MDecl MethodDecl | FDecl FieldDecl deriving (Show, Read, Eq)
