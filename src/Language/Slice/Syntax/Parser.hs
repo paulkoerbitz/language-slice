@@ -107,14 +107,18 @@ digits :: String
 digits = "0123456789"
 
 identifierChars :: String
-identifierChars = chars ++ digits ++ "_:"
+identifierChars = chars ++ digits
 
-identifier :: Parser String
-identifier = do c  <- P.oneOf identifierStartChars
-                cs <- P.many $ P.oneOf identifierChars
-                return (c:cs)
+identifier :: Parser AST.Ident
+identifier = do c  <- P.oneOf chars
+                cs <- P.many $ P.oneOf (chars ++ digits)
+                return $ AST.Ident (c:cs)
+                
+nsQualIdent :: Parser AST.NsQualIdent
+nsQualIdent = do (h:t) <- identifier `P.sepBy1` (P.string "::")
+                 return $ AST.NsQualIdent (unIdent h) (reverse $ map unIdent t)
   where
-    identifierStartChars = chars ++ digits ++ "_"
+    unIdent (AST.Ident x) = x
 
 parseType :: Parser AST.SliceType
 parseType = (    P.try (P.string "void" >> return AST.STVoid)
@@ -125,7 +129,7 @@ parseType = (    P.try (P.string "void" >> return AST.STVoid)
              <|> P.try (P.string "float" >> return AST.STFloat)
              <|> P.try (P.string "double" >> return AST.STDouble)
              <|> P.try (P.string "string" >> return AST.STString)
-             <|> P.try (do tn <- identifier
+             <|> P.try (do tn <- nsQualIdent
                            skipWsOrComment
                            (P.char '*' >> return (AST.STUserDefinedPrx tn)) <|> return (AST.STUserDefined tn)))
             P.<?> "type"
@@ -143,7 +147,7 @@ parseSepList sep parser = go []
                 (sep >> go (i:lst)) <|> (return (Prelude.reverse $ i:lst))
              <|> if Prelude.null lst then return [] else fail " parseSepList: extra seperator"
 
-parseBlock :: String -> Parser a -> Parser (String, a)
+parseBlock :: String -> Parser a -> Parser (AST.Ident, a)
 parseBlock kw parser = do
     P.string kw >> skipWsOrComment
     name <- identifier
@@ -151,7 +155,7 @@ parseBlock kw parser = do
     return (name,decls)
   P.<?> kw
 
-parseExtBlock :: String -> Parser a -> Parser (String, [String], a)
+parseExtBlock :: String -> Parser a -> Parser (AST.Ident, [AST.NsQualIdent], a)
 parseExtBlock kw parser = 
   do P.string kw >> skipWsOrComment
      name <- identifier
@@ -162,7 +166,7 @@ parseExtBlock kw parser =
   where
     parseExtensions = 
       do P.string "extends" >> skipWsOrComment
-         parseSepList (P.char ',') identifier
+         parseSepList (P.char ',') nsQualIdent
       <|> return []
 
 parseModule :: Parser AST.SliceDecl
@@ -210,7 +214,7 @@ parseInterface =
   
 parseInterfaceF :: Parser AST.SliceDecl
 parseInterfaceF = do 
-  nm <- P.string "interface " *> identifier
+  nm <- P.string "interface " *> nsQualIdent
   skipWsOrComment >> P.string ";" >> skipWsOrComment
   return $ AST.InterfaceFDecl nm
 
@@ -268,7 +272,7 @@ parseSliceVal = do
               (D dbl) -> return . AST.SliceDouble $ dbl
               (I int) -> return . AST.SliceInteger $ int)
     <|> (AST.SliceStr <$> parseString)
-    <|> (AST.SliceIdentifier <$> identifier))
+    <|> (AST.SliceIdentifier <$> nsQualIdent))
    <* skipWsOrComment)
   where
     parseBool   = (P.string "true" >> return True) <|> (P.string "false" >> return False)
@@ -301,7 +305,7 @@ parseMethodOrField = P.try (parseMethod >>= return . AST.MDecl) <|> P.try (parse
 parseIfDef :: Parser [AST.SliceDecl]
 parseIfDef = do
   skipWsOrComment >> P.string "#ifndef" >> skipWsOrComment
-  guard <- identifier
+  (AST.Ident guard) <- identifier
   skipWsOrComment >> P.string "#define" >> skipWsOrComment >> P.string guard >> skipWsOrComment
   result <- P.many $ liftWs parseSlice
   skipWsOrComment >> P.string "#endif" >> skipWsOrComment
