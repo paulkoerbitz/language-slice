@@ -106,9 +106,6 @@ chars = "_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 digits :: String
 digits = "0123456789"
 
-identifierStartChars :: String
-identifierStartChars = chars ++ digits ++ "_"
-
 identifierChars :: String
 identifierChars = chars ++ digits ++ "_:"
 
@@ -116,6 +113,8 @@ identifier :: Parser String
 identifier = do c  <- P.oneOf identifierStartChars
                 cs <- P.many $ P.oneOf identifierChars
                 return (c:cs)
+  where
+    identifierStartChars = chars ++ digits ++ "_"
 
 parseType :: Parser AST.SliceType
 parseType = (    P.try (P.string "void" >> return AST.STVoid)
