@@ -116,7 +116,7 @@ parseIdent = do c  <- P.oneOf chars
                 
 parseNsQualIdent :: Parser AST.NsQualIdent
 parseNsQualIdent = do (h:t) <- reverse <$> parseIdent `P.sepBy1` (P.string "::")
-                 return $ AST.NsQualIdent (unIdent h) (reverse $ map unIdent t)
+                      return $ AST.NsQualIdent (unIdent h) (reverse $ map unIdent t)
   where
     unIdent (AST.Ident x) = x
 
