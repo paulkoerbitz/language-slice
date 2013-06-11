@@ -16,7 +16,7 @@ library
   exposed-modules:   Language.Slice.Syntax.Parser, Language.Slice.Syntax.AST
   build-depends:     base >=4.5 && < 5, 
                      bytestring >=0.9.2,
-                     transformers >= 0.3,
+                     transformers >= 0.2.2,
                      parsec >= 3
                      -- attoparsec >=0.10, 
   ghc-options:       -Wall
@@ -32,7 +32,7 @@ Test-Suite test-parser
                      test-framework-hunit,
                      bytestring,
                      parsec >= 3,
-                     transformers >= 0.3,
+                     transformers >= 0.2.2,
                      language-slice
   x-uses-tf:         true
   ghc-options:       -Wall
