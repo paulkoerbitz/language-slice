@@ -19,6 +19,7 @@ testParse p = parse p "String"
 testCases :: HU.Test
 testCases = HU.TestList
   [ " type 1"          HU.~: Right (STUserDefinedPrx (NsQualIdent "MyType" [])) HU.@=? (testParse parseType "MyType*")
+  , " type 2"          HU.~: Right (STUserDefinedPrx (NsQualIdent "MyType" ["ns1","ns2"])) HU.@=? (testParse parseType "ns1::ns2::MyType*")
   , " field 1"         HU.~: Right (FieldDecl (STUserDefinedPrx (NsQualIdent "MyType" [])) (Ident "MyIdentifier") Nothing) HU.@=? testParse parseSemTermField "MyType* MyIdentifier;"
   , " const 1"         HU.~: Right (ConstDecl STBool (Ident "MyBool") (SliceBool True)) HU.@=? testParse parseConst "const bool MyBool = true;"
   , " include quotes"  HU.~: Right [IncludeDecl Quotes "some/relative/path.ice"] HU.@=? testParse parseSlices "#include \"some/relative/path.ice\""
