@@ -114,8 +114,8 @@ parseIdent = do c  <- P.oneOf chars
                 cs <- P.many $ P.oneOf (chars ++ digits)
                 return $ AST.Ident (c:cs)
                 
-nsQualIdent :: Parser AST.NsQualIdent
-nsQualIdent = do (h:t) <- reverse <$> parseIdent `P.sepBy1` (P.string "::")
+parseNsQualIdent :: Parser AST.NsQualIdent
+parseNsQualIdent = do (h:t) <- reverse <$> parseIdent `P.sepBy1` (P.string "::")
                  return $ AST.NsQualIdent (unIdent h) (reverse $ map unIdent t)
   where
     unIdent (AST.Ident x) = x
@@ -129,7 +129,7 @@ parseType = (    P.try (P.string "void" >> return AST.STVoid)
              <|> P.try (P.string "float" >> return AST.STFloat)
              <|> P.try (P.string "double" >> return AST.STDouble)
              <|> P.try (P.string "string" >> return AST.STString)
-             <|> P.try (do tn <- nsQualIdent
+             <|> P.try (do tn <- parseNsQualIdent
                            skipWsOrComment
                            (P.char '*' >> return (AST.STUserDefinedPrx tn)) <|> return (AST.STUserDefined tn)))
             P.<?> "type"
@@ -166,7 +166,7 @@ parseExtBlock kw parser =
   where
     parseExtensions = 
       do P.string "extends" >> skipWsOrComment
-         parseSepList (P.char ',') nsQualIdent
+         parseSepList (P.char ',') parseNsQualIdent
       <|> return []
 
 parseModule :: Parser AST.SliceDecl
@@ -214,7 +214,7 @@ parseInterface =
   
 parseInterfaceF :: Parser AST.SliceDecl
 parseInterfaceF = do 
-  nm <- P.string "interface " *> nsQualIdent
+  nm <- P.string "interface " *> parseNsQualIdent
   skipWsOrComment >> P.string ";" >> skipWsOrComment
   return $ AST.InterfaceFDecl nm
 
@@ -272,7 +272,7 @@ parseSliceVal = do
               (D dbl) -> return . AST.SliceDouble $ dbl
               (I int) -> return . AST.SliceInteger $ int)
     <|> (AST.SliceStr <$> parseString)
-    <|> (AST.SliceIdentifier <$> nsQualIdent))
+    <|> (AST.SliceIdentifier <$> parseNsQualIdent))
    <* skipWsOrComment)
   where
     parseBool   = (P.string "true" >> return True) <|> (P.string "false" >> return False)
@@ -295,7 +295,7 @@ parseMethod = do
   _ <- skipWsOrComment >> P.char '('
   fields <- parseSepList (P.char ',') parseField
   _ <- skipWsOrComment >> P.char ')' 
-  excepts <- (skipWsOrComment >> P.string "throws" >> skipWsOrComment >> parseSepList (P.char ',') nsQualIdent) <|> return []
+  excepts <- (skipWsOrComment >> P.string "throws" >> skipWsOrComment >> parseSepList (P.char ',') parseNsQualIdent) <|> return []
   skipWsOrComment >> P.char ';' >> skipWsOrCommentOrSem
   return $ AST.MethodDecl rType name fields excepts annot
 
