@@ -2,6 +2,8 @@
 module Language.Slice.Syntax.Parser
        ( parse
        , parseFile  
+       , parseIdent
+       , parseNsQualIdent
        , parseMethod
        , parseField
        , parseType
