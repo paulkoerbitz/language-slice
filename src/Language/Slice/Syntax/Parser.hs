@@ -109,13 +109,13 @@ digits = "0123456789"
 identifierChars :: String
 identifierChars = chars ++ digits
 
-identifier :: Parser AST.Ident
-identifier = do c  <- P.oneOf chars
+parseIdent :: Parser AST.Ident
+parseIdent = do c  <- P.oneOf chars
                 cs <- P.many $ P.oneOf (chars ++ digits)
                 return $ AST.Ident (c:cs)
                 
 nsQualIdent :: Parser AST.NsQualIdent
-nsQualIdent = do (h:t) <- identifier `P.sepBy1` (P.string "::")
+nsQualIdent = do (h:t) <- reverse <$> parseIdent `P.sepBy1` (P.string "::")
                  return $ AST.NsQualIdent (unIdent h) (reverse $ map unIdent t)
   where
     unIdent (AST.Ident x) = x
@@ -150,7 +150,7 @@ parseSepList sep parser = go []
 parseBlock :: String -> Parser a -> Parser (AST.Ident, a)
 parseBlock kw parser = do
     P.string kw >> skipWsOrComment
-    name <- identifier
+    name <- parseIdent
     decls <- P.between (charWs '{') (charWs '}') parser <* charWs ';'
     return (name,decls)
   P.<?> kw
@@ -158,7 +158,7 @@ parseBlock kw parser = do
 parseExtBlock :: String -> Parser a -> Parser (AST.Ident, [AST.NsQualIdent], a)
 parseExtBlock kw parser = 
   do P.string kw >> skipWsOrComment
-     name <- identifier
+     name <- parseIdent
      exts <- skipWsOrComment *> parseExtensions <* skipWsOrComment
      decls <- P.between (charWs '{') (charWs '}') parser <* charWs ';'
      skipWsOrComment
@@ -187,7 +187,7 @@ parseInclude =
 
 parseEnum :: Parser AST.SliceDecl
 parseEnum = do
-    (name,decls) <- parseBlock "enum" ((liftWs identifier `P.sepBy` (P.char ',')) <* P.optional (P.char ','))
+    (name,decls) <- parseBlock "enum" ((liftWs parseIdent `P.sepBy` (P.char ',')) <* P.optional (P.char ','))
     return (AST.EnumDecl name decls)
   P.<?> "enum"
 
@@ -228,7 +228,7 @@ parseSequence = do
   _ <- P.string "sequence<"
   type' <- parseType
   _ <- P.char '>' >> skipWsOrComment
-  name <- identifier
+  name <- parseIdent
   _ <- skipWsOrComment >> P.char ';' >> skipWsOrCommentOrSem
   return $ AST.SequenceDecl type' name
 
@@ -239,7 +239,7 @@ parseDictionary = do
   skipWsOrComment >> P.char ',' >> skipWsOrComment
   type2 <- parseType
   P.char '>' >> skipWsOrComment
-  name <- identifier
+  name <- parseIdent
   skipWsOrComment >> P.char ';' >> skipWsOrCommentOrSem
   return $ AST.DictionaryDecl type1 type2 name
 
@@ -247,7 +247,7 @@ parseField :: Parser AST.FieldDecl
 parseField = do
   type' <- parseType
   skipWsOrComment
-  name <- identifier
+  name <- parseIdent
   skipWsOrComment
   return $ AST.FieldDecl type' name Nothing
   
@@ -291,7 +291,7 @@ parseMethod = do
   annot <- (P.string "idempotent" >> skipWsOrComment >> return (Just AST.Idempotent)) <|> return Nothing
   rType <- parseType
   skipWsOrComment
-  name <- identifier
+  name <- parseIdent
   _ <- skipWsOrComment >> P.char '('
   fields <- parseSepList (P.char ',') parseField
   _ <- skipWsOrComment >> P.char ')' 
@@ -305,7 +305,7 @@ parseMethodOrField = P.try (parseMethod >>= return . AST.MDecl) <|> P.try (parse
 parseIfDef :: Parser [AST.SliceDecl]
 parseIfDef = do
   skipWsOrComment >> P.string "#ifndef" >> skipWsOrComment
-  (AST.Ident guard) <- identifier
+  (AST.Ident guard) <- parseIdent
   skipWsOrComment >> P.string "#define" >> skipWsOrComment >> P.string guard >> skipWsOrComment
   result <- P.many $ liftWs parseSlice
   skipWsOrComment >> P.string "#endif" >> skipWsOrComment
@@ -314,6 +314,6 @@ parseIfDef = do
 parseConst :: Parser AST.SliceDecl
 parseConst = do
   tp <- "const" .*> skipWsOrComment >> parseType
-  nm <- skipWsOrComment >> identifier
+  nm <- skipWsOrComment >> parseIdent
   val <- skipWsOrComment >> parseSliceVal
   return $ AST.ConstDecl tp nm val
