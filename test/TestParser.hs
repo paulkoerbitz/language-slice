@@ -1,26 +1,35 @@
-{-# LANGUAGE OverloadedStrings, FlexibleContexts #-}
-import           Data.Functor.Identity (Identity)
+{-# LANGUAGE OverloadedStrings #-}
 import qualified Test.HUnit                           as HU
 import           Test.Framework
 import           Test.Framework.Providers.HUnit
 import           Language.Slice.Syntax.Parser
 import           Language.Slice.Syntax.AST
 
-import qualified Text.Parsec as P
+import qualified Data.ByteString as BS
+import qualified Text.Parsec.ByteString as PBS
 import qualified Text.Parsec.Error as PE
 
 instance Eq PE.ParseError where
   e1 == e2 = PE.errorPos e1 == PE.errorPos e2 && PE.errorMessages e1 == PE.errorMessages e2
   
-testParse :: P.Stream s Data.Functor.Identity.Identity t =>
-             P.Parsec s () a -> s -> Either PE.ParseError a  
+testParse :: PBS.Parser a -> BS.ByteString -> Either SyntaxError a  
 testParse p = parse p "String"
+
+onLeft :: (a -> b) -> Either a c -> Either b c
+onLeft f (Left x)  = Left $ f x
+onLeft _ (Right x) = Right x
 
 testCases :: HU.Test
 testCases = HU.TestList
-  [ " type 1"          HU.~: Right (STUserDefinedPrx (NsQualIdent "MyType" [])) HU.@=? (testParse parseType "MyType*")
+  [ " ident 1"         HU.~: Right (Ident "My_great_Ident_01") HU.@=? (testParse parseIdent "My_great_Ident_01")
+  , " ident 2"         HU.~: Right (Ident "_my_small_ident_01_") HU.@=? (testParse parseIdent "_my_small_ident_01_")
+  , " ident 3"         HU.~: Left  "String:1:1: \nunexpected: \"0\"\n0_my_small_ident_01_\n^___\n" HU.@=? onLeft show (testParse parseIdent "0_my_small_ident_01_")
+  , " nsQualIdent 1"   HU.~: Right (NsQualIdent "_Ident" ["_Ns1", "Ns_2"]) HU.@=? (testParse parseNsQualIdent "_Ns1::Ns_2::_Ident")
+  , " type 1"          HU.~: Right (STUserDefinedPrx (NsQualIdent "MyType" [])) HU.@=? (testParse parseType "MyType*")
   , " type 2"          HU.~: Right (STUserDefinedPrx (NsQualIdent "MyType" ["ns1","ns2"])) HU.@=? (testParse parseType "ns1::ns2::MyType*")
+  , " type 3"          HU.~: Left "String:1:5: \nunexpected: \"c\"\nexpected: \"::\"\na::b:c\n    ^___\n" HU.@=? onLeft show (testParse parseType "a::b:c")
   , " field 1"         HU.~: Right (FieldDecl (STUserDefinedPrx (NsQualIdent "MyType" [])) (Ident "MyIdentifier") Nothing) HU.@=? testParse parseSemTermField "MyType* MyIdentifier;"
+  , " field 2"         HU.~: Right (FieldDecl (STUserDefinedPrx (NsQualIdent "MyType" ["Ns1", "Ns_2"])) (Ident "MyIdentifier") Nothing) HU.@=? testParse parseSemTermField "Ns1::Ns_2::MyType* MyIdentifier;"
   , " const 1"         HU.~: Right (ConstDecl STBool (Ident "MyBool") (SliceBool True)) HU.@=? testParse parseConst "const bool MyBool = true;"
   , " include quotes"  HU.~: Right [IncludeDecl Quotes "some/relative/path.ice"] HU.@=? testParse parseSlices "#include \"some/relative/path.ice\""
   , " include backets" HU.~: Right [IncludeDecl AngleBrackets "some/relative/path.ice"] HU.@=? testParse parseSlices "#include <some/relative/path.ice>"
