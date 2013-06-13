@@ -141,7 +141,6 @@ parseType = (    P.try (P.string "void" >> return AST.STVoid)
              <|> P.try (do tn <- parseNsQualIdent
                            skipWsOrComment
                            (P.char '*' >> return (AST.STUserDefinedPrx tn)) <|> return (AST.STUserDefined tn)))
-            P.<?> "type"
             
 liftWs :: Parser a -> Parser a
 liftWs parser = skipWsOrComment *> parser <* skipWsOrComment
