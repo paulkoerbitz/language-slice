@@ -42,17 +42,21 @@ instance Show SyntaxError where
       genIdnt res n ('\t':xs) | n>0 = genIdnt ('\t':res) (n-8) xs
       genIdnt res n (_:xs)    | n>0 = genIdnt (' ':res) (n-1) xs
       genIdnt res _ _               = reverse res
+      
+parseError2SyntaxError :: BS.ByteString -> PE.ParseError -> SyntaxError
+parseError2SyntaxError s err = SyntaxError line pos' msgs'
+  where 
+    pos'  = PE.errorPos err
+    msgs' = PE.errorMessages err
+    line  = BSC.unpack $ head $ drop (P.sourceLine pos' - 1) $ BSC.lines s
 
 parseFile :: String -> IO (Either SyntaxError [AST.SliceDecl])
 parseFile file = do
   parseResult <- PBS.parseFromFile parseSlices file
   case parseResult of
     Left err      -> do
-      fileData <- readFile file
-      let pos'  = PE.errorPos err
-          msgs' = PE.errorMessages err
-          line  = head $ drop (P.sourceLine pos' - 1) $ lines fileData
-      return . Left $ SyntaxError line pos' msgs'
+      fileData <- BS.readFile file
+      return . Left $ parseError2SyntaxError fileData err
     (Right res) -> return $ Right res
 
 parseSlices :: Parser [AST.SliceDecl]
