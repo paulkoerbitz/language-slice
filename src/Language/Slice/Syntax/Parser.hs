@@ -16,8 +16,9 @@ module Language.Slice.Syntax.Parser
        ) where
 
 import           Control.Applicative ((<|>),(<$>),(<*>),(<*),(*>))
-import           Data.Functor.Identity (Identity)
 import           Data.Monoid
+import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as BSC
 import qualified Text.Parsec as P
 import qualified Text.Parsec.ByteString as PBS
 import qualified Text.Parsec.Error as PE
@@ -26,8 +27,10 @@ import qualified Language.Slice.Syntax.AST as AST
 
 type Parser = PBS.Parser
 
-parse :: P.Stream s Identity t => P.Parsec s () a -> P.SourceName -> s -> Either P.ParseError a
-parse = P.parse
+parse :: Parser a -> P.SourceName -> BS.ByteString -> Either SyntaxError a
+parse p nm src = case P.parse p nm src of
+  (Right res) -> Right res
+  (Left  err) -> Left $ parseError2SyntaxError src err
 
 data SyntaxError = SyntaxError { ctxt :: String, pos :: P.SourcePos, msgs :: [PE.Message] }
                  deriving (Eq)
