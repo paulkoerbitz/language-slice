@@ -1,5 +1,5 @@
 name:                language-slice
-version:             0.2.1.0
+version:             0.3.0.0
 synopsis:            AST and parser for the ZeroC Slice language (Specification language for ICE)
 description:         AST and parser for the ZeroC Slice language (Specification language for ICE)
 homepage:            https://github.com/paulkoerbitz/language-slice
@@ -15,8 +15,9 @@ cabal-version:       >=1.8
 library
   exposed-modules:   Language.Slice.Syntax.Parser, Language.Slice.Syntax.AST
   build-depends:     base >=4.5 && < 5, 
-                     attoparsec >=0.10, 
-                     bytestring >=0.9.2
+                     bytestring >=0.9.2,
+                     transformers >= 0.2.2,
+                     parsec >= 3
   ghc-options:       -Wall
   hs-source-dirs:    src
 
@@ -29,8 +30,10 @@ Test-Suite test-parser
                      test-framework-quickcheck2,
                      test-framework-hunit,
                      bytestring,
+                     parsec >= 3,
+                     transformers >= 0.2.2,
                      language-slice
   x-uses-tf:         true
-  ghc-options:       -Wall
+  ghc-options:       -Wall -fno-warn-orphans
   hs-source-dirs:    test
   main-is:           TestParser.hs
